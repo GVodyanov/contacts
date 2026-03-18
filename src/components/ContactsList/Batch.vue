@@ -12,6 +12,9 @@
 			<h3 v-if="mode === 'move'">
 				{{ t('contacts', 'Move contacts to addressbook') }}
 			</h3>
+			<h3 v-if="mode === 'removeFromGroup'">
+				{{ t('contacts', 'Remove contacts from groups') }}
+			</h3>
 		</div>
 
 		<!-- Group selector for group mode -->
@@ -29,12 +32,23 @@
 			:input-label="t('contacts', 'Select addressbook')"
 			:options="moveTargetOptions" />
 
+		<!-- Group selector for removeFromGroup mode -->
+		<NcSelect
+			v-if="mode === 'removeFromGroup'"
+			v-model="selectedGroups"
+			:input-label="t('contacts', 'Select groups')"
+			:multiple="true"
+			:options="removeFromGroupOptions" />
+
 		<h6>{{ t('contacts', 'Selected contacts') }}</h6>
 		<NcNoteCard v-if="mode === 'group' && canModifyCount !== contacts.length" type="info">
 			{{ t('contacts', 'Please note that only {count} of the {total} contacts can be added to a group', { count: canModifyCount, total: contacts.length }) }}
 		</NcNoteCard>
 		<NcNoteCard v-if="mode === 'move' && canDeleteCount !== contacts.length" type="info">
 			{{ t('contacts', 'Please note that only {count} of the {total} contacts can be moved', { count: canDeleteCount, total: contacts.length }) }}
+		</NcNoteCard>
+		<NcNoteCard v-if="mode === 'removeFromGroup' && canModifyCount !== contacts.length" type="info">
+			{{ t('contacts', 'Please note that only {count} of the {total} contacts can be removed from a group', { count: canModifyCount, total: contacts.length }) }}
 		</NcNoteCard>
 
 		<ul class="contacts-list">
@@ -81,6 +95,16 @@
 				</template>
 				{{ t('contacts', 'Move') }}
 			</NcButton>
+			<NcButton
+				v-if="mode === 'removeFromGroup'"
+				variant="primary"
+				:disabled="selectedGroups.length === 0"
+				@click="submit">
+				<template #icon>
+					<IconAccountMinus :size="20" />
+				</template>
+				{{ t('contacts', 'Remove') }}
+			</NcButton>
 		</div>
 	</div>
 </template>
@@ -88,11 +112,13 @@
 <script>
 import { t } from '@nextcloud/l10n'
 import { NcButton, NcNoteCard, NcSelect } from '@nextcloud/vue'
+import IconAccountMinus from 'vue-material-design-icons/AccountMultipleMinusOutline.vue'
 import IconAccountPlus from 'vue-material-design-icons/AccountMultiplePlusOutline.vue'
 import IconBookArrow from 'vue-material-design-icons/BookArrowRightOutline.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import ContactsListItem from './ContactsListItem.vue'
 import appendContactToGroup from '../../services/appendContactToGroup.js'
+import removeContactFromGroup from '../../services/removeContactFromGroup.js'
 import contacts from '../../store/contacts.js'
 
 export default {
@@ -104,6 +130,7 @@ export default {
 		NcSelect,
 		IconPlus,
 		IconAccountPlus,
+		IconAccountMinus,
 		IconBookArrow,
 		NcNoteCard,
 	},
@@ -147,6 +174,16 @@ export default {
 			}))
 		},
 
+		removeFromGroupOptions() {
+			const groupNames = new Set()
+			this.contacts.forEach((contact) => {
+				if (contact.groups) {
+					contact.groups.forEach((groupName) => groupNames.add(groupName))
+				}
+			})
+			return Array.from(groupNames).map((name) => ({ label: name, value: name }))
+		},
+
 		canModifyCount() {
 			return this.contacts.filter((contact) => contact.addressbook.canModifyCard).length
 		},
@@ -172,6 +209,10 @@ export default {
 			if (this.mode === 'move') {
 				this.moveToAddressbook()
 			}
+
+			if (this.mode === 'removeFromGroup') {
+				this.removeFromGroup()
+			}
 		},
 
 		listItemTitle(contact) {
@@ -180,6 +221,9 @@ export default {
 			}
 			if (this.mode === 'group') {
 				return contact.addressbook.canModifyCard ? '' : t('contacts', 'This contact cannot be grouped')
+			}
+			if (this.mode === 'removeFromGroup') {
+				return contact.addressbook.canModifyCard ? '' : t('contacts', 'This contact cannot be modified')
 			}
 			// shouldn't end up here
 			return ''
@@ -205,6 +249,29 @@ export default {
 					appendContactToGroup(contact, group.name)
 						.then(() => {
 							this.$store.dispatch('addContactToGroup', { contact, groupName: group.name })
+						})
+						.catch((error) => {
+							console.error(error)
+						})
+				})
+			})
+
+			this.$emit('submit')
+		},
+
+		async removeFromGroup() {
+			// Remove from selected groups
+			this.selectedGroups.forEach((selectedGroup) => {
+				this.contacts.forEach((contact) => {
+					if (!contact.addressbook.canModifyCard) {
+						return
+					} // skip read-only contacts
+					if (!contact.groups || !contact.groups.includes(selectedGroup.value)) {
+						return
+					} // skip if contact is not in this group
+					removeContactFromGroup(contact, selectedGroup.value)
+						.then(() => {
+							this.$store.dispatch('removeContactFromGroup', { contact, groupName: selectedGroup.value })
 						})
 						.catch((error) => {
 							console.error(error)
