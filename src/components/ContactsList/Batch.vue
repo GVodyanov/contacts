@@ -13,7 +13,7 @@
 				{{ t('contacts', 'Move contacts to addressbook') }}
 			</h3>
 			<h3 v-if="mode === 'removeFromGroup'">
-				{{ t('contacts', 'Remove contacts from groups') }}
+				{{ t('contacts', 'Remove contacts from group {groupName}', { groupName }) }}
 			</h3>
 		</div>
 
@@ -31,14 +31,6 @@
 			v-model="selectedAddressesBook"
 			:input-label="t('contacts', 'Select addressbook')"
 			:options="moveTargetOptions" />
-
-		<!-- Group selector for removeFromGroup mode -->
-		<NcSelect
-			v-if="mode === 'removeFromGroup'"
-			v-model="selectedGroups"
-			:input-label="t('contacts', 'Select groups')"
-			:multiple="true"
-			:options="removeFromGroupOptions" />
 
 		<h6>{{ t('contacts', 'Selected contacts') }}</h6>
 		<NcNoteCard v-if="mode === 'group' && canModifyCount !== contacts.length" type="info">
@@ -98,7 +90,6 @@
 			<NcButton
 				v-if="mode === 'removeFromGroup'"
 				variant="primary"
-				:disabled="selectedGroups.length === 0"
 				@click="submit">
 				<template #icon>
 					<IconAccountMinus :size="20" />
@@ -147,6 +138,12 @@ export default {
 			required: false,
 			default: 'group',
 		},
+
+		groupName: {
+			type: String,
+			required: false,
+			default: null,
+		},
 	},
 
 	emits: ['submit'],
@@ -173,16 +170,6 @@ export default {
 				label: group.name,
 				value: group.name,
 			}))
-		},
-
-		removeFromGroupOptions() {
-			const groupNames = new Set()
-			this.contacts.forEach((contact) => {
-				if (contact.groups) {
-					contact.groups.forEach((groupName) => groupNames.add(groupName))
-				}
-			})
-			return Array.from(groupNames).map((name) => ({ label: name, value: name }))
 		},
 
 		canModifyCount() {
@@ -261,26 +248,26 @@ export default {
 		},
 
 		async removeFromGroup() {
-			// Remove from selected groups
+			// Remove from the current group (provided via the groupName prop)
 			const removePromises = []
-			for (const selectedGroup of this.selectedGroups) {
-				for (const contact of this.contacts) {
-					if (!contact.addressbook.canModifyCard) {
-						continue
-					} // skip read-only contacts
-					if (!contact.groups || !contact.groups.includes(selectedGroup.value)) {
-						continue
-					} // skip if contact is not in this group
-					const promise = removeContactFromGroup(contact, selectedGroup.value)
-						.then(() => {
-							this.$store.dispatch('removeContactFromGroup', { contact, groupName: selectedGroup.value })
-						})
-						.catch((error) => {
-							console.error(error)
-							showError(t('contacts', 'An error occurred while removing a contact from the group'))
-						})
-					removePromises.push(promise)
+			for (const contact of this.contacts) {
+				// skip read-only contacts
+				if (!contact.addressbook.canModifyCard) {
+					continue
 				}
+				// skip if contact is not in this group
+				if (!contact.groups || !contact.groups.includes(this.groupName)) {
+					continue
+				}
+				const promise = removeContactFromGroup(contact, this.groupName)
+					.then(() => {
+						this.$store.dispatch('removeContactFromGroup', { contact, groupName: this.groupName })
+					})
+					.catch((error) => {
+						console.error(error)
+						showError(t('contacts', 'An error occurred while removing a contact from the group'))
+					})
+				removePromises.push(promise)
 			}
 
 			await Promise.all(removePromises)

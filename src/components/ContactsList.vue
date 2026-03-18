@@ -48,7 +48,11 @@
 			:name="t('contacts', 'Remove contacts from group')"
 			size="large"
 			@close="isRemovingFromGroup = false">
-			<Batch :contacts="Array.from(multiSelectedContacts.values())" mode="removeFromGroup" @submit="finishBatch" />
+			<Batch
+				:contacts="Array.from(multiSelectedContacts.values())"
+				mode="removeFromGroup"
+				:group-name="selectedGroup"
+				@submit="finishBatch" />
 		</NcModal>
 
 		<NcModal
@@ -105,6 +109,7 @@
 					<IconAccountMultiple :size="20" />
 				</NcButton>
 				<NcButton
+					v-if="isCurrentGroupReal"
 					variant="tertiary"
 					:title="removeFromGroupActionTitle"
 					:disabled="!canModifyAnySelected"
@@ -259,6 +264,16 @@ export default {
 
 		isMultiSelecting() {
 			return this.multiSelectedContacts.size > 0
+		},
+
+		/**
+		 * Is the current selectedGroup a real (user-created) group?
+		 * Excludes virtual groups like "All contacts", "Not grouped", etc.
+		 *
+		 * @return {boolean}
+		 */
+		isCurrentGroupReal() {
+			return this.$store.getters.getGroups.findIndex((group) => group.name === this.selectedGroup) > -1
 		},
 
 		readOnlyMultiSelectedCount() {
