@@ -110,6 +110,7 @@
 </template>
 
 <script>
+import { showError } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import { NcButton, NcNoteCard, NcSelect } from '@nextcloud/vue'
 import IconAccountMinus from 'vue-material-design-icons/AccountMultipleMinusOutline.vue'
@@ -261,23 +262,28 @@ export default {
 
 		async removeFromGroup() {
 			// Remove from selected groups
-			this.selectedGroups.forEach((selectedGroup) => {
-				this.contacts.forEach((contact) => {
+			const removePromises = []
+			for (const selectedGroup of this.selectedGroups) {
+				for (const contact of this.contacts) {
 					if (!contact.addressbook.canModifyCard) {
-						return
+						continue
 					} // skip read-only contacts
 					if (!contact.groups || !contact.groups.includes(selectedGroup.value)) {
-						return
+						continue
 					} // skip if contact is not in this group
-					removeContactFromGroup(contact, selectedGroup.value)
+					const promise = removeContactFromGroup(contact, selectedGroup.value)
 						.then(() => {
 							this.$store.dispatch('removeContactFromGroup', { contact, groupName: selectedGroup.value })
 						})
 						.catch((error) => {
 							console.error(error)
+							showError(t('contacts', 'An error occurred while removing a contact from the group'))
 						})
-				})
-			})
+					removePromises.push(promise)
+				}
+			}
+
+			await Promise.all(removePromises)
 
 			this.$emit('submit')
 		},
